@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Falco" Version="4.*" />
+    <PackageReference Include="FSharp.CosmosDb" Version="1.2.1" />
     <PackageReference Include="FSharp.Data" Version="6.2.0" />
   </ItemGroup>
 </Project>
