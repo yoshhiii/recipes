@@ -12,26 +12,28 @@ open Microsoft.Extensions.DependencyInjection
 open Recipes.UI
 
 let form =
-    Elem.form
-        [ Attr.method "post" ]
-        [ Elem.input [ Attr.name "url" ]
-          Elem.input [ Attr.type' "submit"; Attr.value "Scrape me"; Attr.class' "rounded-md bg-red-100 border-black border "] ]
-let view =
     let title = "Scrape a recipe"
-    Layouts.master title [
-        Elem.div [] [form]
-    ]
+    Layouts.master title [ Elem.div [ Attr.class' "flex w-6/12 p-5"  ] [  
+    Elem.form
+        [ Attr.method "post"; Attr.class' "flex-row space-x-2 justify-around" ]
+        [ Elem.input [ Attr.name "url"; Attr.class' "form-input" ]
+          Elem.input [ Attr.type' "submit"; Attr.value "Scrape me"; Attr.class' "btn-primary" ] ]
+        ]]
 
 let formWithResult (recipeContent: HtmlNode list) =
-    Templates.html5
-        "en"
-        []
-        [ Elem.form
-              [ Attr.method "post" ]
-              [ Elem.input [ Attr.name "url" ]
-                Elem.input [ Attr.type' "submit"; Attr.value "Scrape me" ] ]
-          Elem.h2 [] [ Text.raw "Ingredients" ]
-          Elem.ul [] (recipeContent |> List.map (fun x -> Elem.li [] [ Text.raw (x.InnerText()) ])) ]
+    Layouts.master
+        "scraped"
+        [
+          Elem.div
+              [ Attr.class' "flex-col w-6/12 p-5" ]
+              [ Elem.form
+                    [ Attr.method "post"; Attr.class' "flex-row space-x-2 justify-around"]
+                    [ Elem.input [ Attr.name "url"; Attr.class' "form-input"]
+                      Elem.input [ Attr.type' "submit"; Attr.value "Scrape me"; Attr.class'"btn-primary" ] ]
+                Elem.div [Attr.class' "flex-row"] [
+                    Elem.h2 [] [ Text.raw "Ingredients" ]
+                    Elem.ul [] (recipeContent |> List.map (fun x -> Elem.li [] [ Text.raw (x.InnerText()) ])) ] ]
+                ]
 
 let scrapeUrl (url: string) =
     // let testUrl = "https://www.thepioneerwoman.com/food-cooking/recipes/a32436513/beef-and-broccoli-stir-fry-recipe/"
@@ -69,7 +71,7 @@ type Recipe =
       name: string
       ingredients: string list
       instructions: string list
-      source: string option }  // it might be nice to link to original source if importing
+      source: string option } // it might be nice to link to original source if importing
 
 module Db =
     let getRecipesConnection uri key =
@@ -106,35 +108,34 @@ module UI =
         Elem.form
             [ Attr.method "POST"; Attr.action "/recipes" ]
             [ Elem.input [ Attr.type' "hidden"; Attr.name "recipe_id"; Attr.value (string recipe.id) ]
-              Elem.label [] [
-                  Text.raw "Recipe Name"
-                  Elem.input [ Attr.type' "text"; Attr.name "recipe_name" ] ]
-              Elem.label [] [
-                  Text.raw "Recipe Source"
-                  Elem.input [ Attr.type' "text"; Attr.name "recipe_source"; Attr.placeholder "ie. Mom, https://somefoodblogger.com, etc..." ] ]
-              Elem.label [] [
-                  Text.raw "Ingredients"
-                  Elem.textarea [ Attr.name "recipe_ingredients" ] [] ]
-              Elem.label [] [
-                  Text.raw "Instructions"
-                  Elem.textarea [ Attr.name "recipe_instructions" ] [] ]
+              Elem.label
+                  []
+                  [ Text.raw "Recipe Name"
+                    Elem.input [ Attr.type' "text"; Attr.name "recipe_name" ] ]
+              Elem.label
+                  []
+                  [ Text.raw "Recipe Source"
+                    Elem.input
+                        [ Attr.type' "text"
+                          Attr.name "recipe_source"
+                          Attr.placeholder "ie. Mom, https://somefoodblogger.com, etc..." ] ]
+              Elem.label [] [ Text.raw "Ingredients"; Elem.textarea [ Attr.name "recipe_ingredients" ] [] ]
+              Elem.label
+                  []
+                  [ Text.raw "Instructions"
+                    Elem.textarea [ Attr.name "recipe_instructions" ] [] ]
               Elem.button [] [ Text.raw "Add to Recipe Box" ] ]
 
 module RecipesController =
     open Db
-    
+
     let private splitLines (s: string) =
         s.Replace("\r", "").Split("\n")
-        |> Seq.where (fun v -> 
-            String.IsNullOrWhiteSpace(v) |> not
-        )
+        |> Seq.where (fun v -> String.IsNullOrWhiteSpace(v) |> not)
         |> Seq.toList
-        
+
     let private getOptionalString (s: string) =
-        if String.IsNullOrWhiteSpace(s) then
-            None
-        else
-            Some(s)
+        if String.IsNullOrWhiteSpace(s) then None else Some(s)
 
     let index: HttpHandler =
         fun ctx ->
@@ -160,7 +161,7 @@ module RecipesController =
                 // There must be a way to just await this without having to assign a variable
                 // let! recipes = RecipeStore.createRecipe conn recipe
                 // Not sure if this is better or worse lol, but I'm guessing we would want to do something
-                // with a response at some point? 
+                // with a response at some point?
                 RecipeStore.createRecipe conn recipe |> Async.RunSynchronously |> ignore
 
                 return Response.redirectTemporarily "/recipes" ctx
@@ -201,8 +202,9 @@ let main args =
     webHost args {
         use_static_files
         add_service dbConnectionService
+
         endpoints
-            [ all "/" [ GET, Response.ofHtml view; POST, handle ]
+            [ all "/" [ GET, Response.ofHtml form; POST, handle ]
               all "/recipes" [ GET, RecipesController.index; POST, RecipesController.save ]
               get "/recipes/new" RecipesController.create ]
     }
