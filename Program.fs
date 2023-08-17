@@ -67,9 +67,9 @@ let handle: HttpHandler =
 type Recipe =
     { id: Guid
       name: string
-      ingredients: List<string>
-      instructions: List<string>
-      source: string } // it might be nice to link to original source if importing
+      ingredients: string list
+      instructions: string list
+      source: string option }  // it might be nice to link to original source if importing
 
 module Db =
     let getRecipesConnection uri key =
@@ -106,11 +106,35 @@ module UI =
         Elem.form
             [ Attr.method "POST"; Attr.action "/recipes" ]
             [ Elem.input [ Attr.type' "hidden"; Attr.name "recipe_id"; Attr.value (string recipe.id) ]
-              Elem.input [ Attr.type' "text"; Attr.name "recipe_name" ]
+              Elem.label [] [
+                  Text.raw "Recipe Name"
+                  Elem.input [ Attr.type' "text"; Attr.name "recipe_name" ] ]
+              Elem.label [] [
+                  Text.raw "Recipe Source"
+                  Elem.input [ Attr.type' "text"; Attr.name "recipe_source"; Attr.placeholder "ie. Mom, https://somefoodblogger.com, etc..." ] ]
+              Elem.label [] [
+                  Text.raw "Ingredients"
+                  Elem.textarea [ Attr.name "recipe_ingredients" ] [] ]
+              Elem.label [] [
+                  Text.raw "Instructions"
+                  Elem.textarea [ Attr.name "recipe_instructions" ] [] ]
               Elem.button [] [ Text.raw "Add to Recipe Box" ] ]
 
 module RecipesController =
     open Db
+    
+    let private splitLines (s: string) =
+        s.Replace("\r", "").Split("\n")
+        |> Seq.where (fun v -> 
+            String.IsNullOrWhiteSpace(v) |> not
+        )
+        |> Seq.toList
+        
+    let private getOptionalString (s: string) =
+        if String.IsNullOrWhiteSpace(s) then
+            None
+        else
+            Some(s)
 
     let index: HttpHandler =
         fun ctx ->
@@ -128,9 +152,9 @@ module RecipesController =
                 let recipe: Recipe =
                     { id = form.GetGuid "recipe_id"
                       name = form.GetString "recipe_name"
-                      ingredients = form.GetStringArray "ingredient[]" |> Array.toList
-                      instructions = form.GetStringArray "instruction[]" |> Array.toList
-                      source = form.TryGetString "source" |> Option.defaultValue "self" }
+                      ingredients = form.GetString "recipe_ingredients" |> splitLines
+                      instructions = form.GetString "recipe_instructions" |> splitLines
+                      source = form.GetString "recipe_source" |> getOptionalString }
 
                 let conn = ctx.GetService<ConnectionOperation>()
                 // There must be a way to just await this without having to assign a variable
@@ -146,10 +170,10 @@ module RecipesController =
         fun ctx ->
             let recipe: Recipe =
                 { id = Guid.NewGuid()
-                  name = ""
+                  name = String.Empty
                   ingredients = []
                   instructions = []
-                  source = "" }
+                  source = Some(String.Empty) }
 
             Response.ofHtml (UI.createRecipe recipe) ctx
 
