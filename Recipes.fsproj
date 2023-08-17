@@ -5,8 +5,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <UpToDateCheckBuilt Include="styles\tailwind.css" Set="Css"/>
+    <UpToDateCheckBuilt Include="postcss.config.js" Set="Css"/>
+    <UpToDateCheckBuilt Include="tailwind.config.js" Set="Css"/>
+    <Compile Include="UI.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
+  
+  <Target Name="Tailwind" BeforeTargets="Build">
+    <Exec Command="npm run css:build" />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="Falco" Version="4.*" />

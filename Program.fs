@@ -9,15 +9,18 @@ open Falco.Markup
 open Falco.Routing
 open Falco.HostBuilder
 open Microsoft.Extensions.DependencyInjection
+open Recipes.UI
 
 let form =
-    Templates.html5
-        "en"
-        []
-        [ Elem.form
-              [ Attr.method "post" ]
-              [ Elem.input [ Attr.name "url" ]
-                Elem.input [ Attr.type' "submit"; Attr.value "Scrape me" ] ] ]
+    Elem.form
+        [ Attr.method "post" ]
+        [ Elem.input [ Attr.name "url" ]
+          Elem.input [ Attr.type' "submit"; Attr.value "Scrape me"; Attr.class' "rounded-md bg-red-100 border-black border "] ]
+let view =
+    let title = "Scrape a recipe"
+    Layouts.master title [
+        Elem.div [] [form]
+    ]
 
 let formWithResult (recipeContent: HtmlNode list) =
     Templates.html5
@@ -27,35 +30,35 @@ let formWithResult (recipeContent: HtmlNode list) =
               [ Attr.method "post" ]
               [ Elem.input [ Attr.name "url" ]
                 Elem.input [ Attr.type' "submit"; Attr.value "Scrape me" ] ]
-          Elem.h2 [] [ Text.raw "Ingredients"]
-          Elem.ul [] (recipeContent |> List.map (fun x -> Elem.li [] [ Text.raw (x.InnerText())]))
-        ]
-   
+          Elem.h2 [] [ Text.raw "Ingredients" ]
+          Elem.ul [] (recipeContent |> List.map (fun x -> Elem.li [] [ Text.raw (x.InnerText()) ])) ]
+
 let scrapeUrl (url: string) =
     // let testUrl = "https://www.thepioneerwoman.com/food-cooking/recipes/a32436513/beef-and-broccoli-stir-fry-recipe/"
     let results = Http.RequestString(url, silentCookieErrors = true)
     let page = HtmlDocument.Parse(results)
-    
-    let data = page.Descendants ["ul"]
-            |> Seq.filter (fun x ->
-                let classList = x.TryGetAttribute "class"
-                match classList with
-                | Some id ->
-                    id.Value().Contains("ingredient")
-                | _ -> false
-                ) // have the ul that should contain ingredient li
-            |> Seq.map (fun x -> x.Descendants ["li"] |> Seq.toList)
-            |> Seq.concat
-            |> Seq.toList
+
+    let data =
+        page.Descendants [ "ul" ]
+        |> Seq.filter (fun x ->
+            let classList = x.TryGetAttribute "class"
+
+            match classList with
+            | Some id -> id.Value().Contains("ingredient")
+            | _ -> false) // have the ul that should contain ingredient li
+        |> Seq.map (fun x -> x.Descendants [ "li" ] |> Seq.toList)
+        |> Seq.concat
+        |> Seq.toList
+
     data
-    
+
 
 let handle: HttpHandler =
     fun ctx ->
         task {
             let! f = Request.getForm ctx
             let url = f.GetString("url", "")
-            let data = scrapeUrl(url)
+            let data = scrapeUrl (url)
 
             return! Response.ofHtml (formWithResult data) ctx
         }
@@ -65,10 +68,11 @@ type Recipe =
     { id: Guid
       name: string
       ingredients: List<string>
-      instructions: List<string> }
+      instructions: List<string>
+      source: string } // it might be nice to link to original source if importing
 
 module Db =
-    let getRecipesConnection uri key=
+    let getRecipesConnection uri key =
         uri
         |> Cosmos.host
         |> Cosmos.connect key
@@ -125,11 +129,15 @@ module RecipesController =
                     { id = form.GetGuid "recipe_id"
                       name = form.GetString "recipe_name"
                       ingredients = form.GetStringArray "ingredient[]" |> Array.toList
-                      instructions = form.GetStringArray "instruction[]" |> Array.toList }
+                      instructions = form.GetStringArray "instruction[]" |> Array.toList
+                      source = form.TryGetString "source" |> Option.defaultValue "self" }
 
                 let conn = ctx.GetService<ConnectionOperation>()
                 // There must be a way to just await this without having to assign a variable
-                let! recipes = RecipeStore.createRecipe conn recipe
+                // let! recipes = RecipeStore.createRecipe conn recipe
+                // Not sure if this is better or worse lol, but I'm guessing we would want to do something
+                // with a response at some point? 
+                RecipeStore.createRecipe conn recipe |> Async.RunSynchronously |> ignore
 
                 return Response.redirectTemporarily "/recipes" ctx
             }
@@ -140,34 +148,39 @@ module RecipesController =
                 { id = Guid.NewGuid()
                   name = ""
                   ingredients = []
-                  instructions = [] }
+                  instructions = []
+                  source = "" }
 
             Response.ofHtml (UI.createRecipe recipe) ctx
-            
+
 [<EntryPoint>]
 let main args =
     let env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
-    
-    let config = configuration [||] {
-        add_env
-        required_json "appsettings.json"
-        optional_json (String.Concat([|"appsettings."; env; ".json"|]))
-    }
-    
+
+    let config =
+        configuration [||] {
+            add_env
+            required_json "appsettings.json"
+            optional_json (String.Concat([| "appsettings."; env; ".json" |]))
+        }
+
     let cosmosUri = config.["Cosmos:Uri"]
     let cosmosKey = config.["Cosmos:Key"]
-    
+
     // I don't know about this
     let dbConnectionService (svc: IServiceCollection) =
         svc.AddSingleton<ConnectionOperation>(fun _ -> Db.getRecipesConnection cosmosUri cosmosKey)
-    
+
     if String.IsNullOrWhiteSpace(cosmosUri) || String.IsNullOrWhiteSpace(cosmosKey) then
         failwith "Invalid cosmos configuration"
-    
+
     webHost args {
+        use_static_files
         add_service dbConnectionService
-        endpoints [ all "/" [ GET, Response.ofHtml form; POST, handle ]
-                    all "/recipes" [ GET, RecipesController.index; POST, RecipesController.save ]
-                    get "/recipes/new" RecipesController.create ]
+        endpoints
+            [ all "/" [ GET, Response.ofHtml view; POST, handle ]
+              all "/recipes" [ GET, RecipesController.index; POST, RecipesController.save ]
+              get "/recipes/new" RecipesController.create ]
     }
+
     0
