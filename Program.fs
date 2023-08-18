@@ -158,11 +158,7 @@ module RecipesController =
                       source = form.GetString "recipe_source" |> getOptionalString }
 
                 let conn = ctx.GetService<ConnectionOperation>()
-                // There must be a way to just await this without having to assign a variable
-                // let! recipes = RecipeStore.createRecipe conn recipe
-                // Not sure if this is better or worse lol, but I'm guessing we would want to do something
-                // with a response at some point?
-                RecipeStore.createRecipe conn recipe |> Async.RunSynchronously |> ignore
+                do! RecipeStore.createRecipe conn recipe |> Async.Ignore
 
                 return Response.redirectTemporarily "/recipes" ctx
             }
